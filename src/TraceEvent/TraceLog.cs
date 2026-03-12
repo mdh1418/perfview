@@ -8536,7 +8536,7 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
             });
         }
 
-        internal void AddUniversalDynamicSymbol(ProcessSymbolTraceData data, TraceProcess process)
+        internal int AddUniversalDynamicSymbol(ProcessSymbolTraceData data, TraceProcess process)
         {
             Debug.Assert(process != null);
 
@@ -8546,19 +8546,21 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
             long symbolLength = (long)(data.EndAddress - data.StartAddress);
             if (symbolLength <= 0)
             {
-                return;
+                return 0;
             }
 
             dynamicMethodCount++;
             MethodIndex methodIndex = Microsoft.Diagnostics.Tracing.Etlx.MethodIndex.Invalid;
             ModuleFileIndex moduleFileIndex = Microsoft.Diagnostics.Tracing.Etlx.ModuleFileIndex.Invalid;
             TraceManagedModule module = null;
+            int matchedAddresses = 0;
             ForAllUnresolvedCodeAddressesInRange(process, data.StartAddress, symbolLength, true, delegate (ref CodeAddressInfo info)
             {
                 // If we already resolved, that means that the address was reused, so only add something if it does not already have
                 // information associated with it.
                 if (info.GetMethodIndex(this) == Microsoft.Diagnostics.Tracing.Etlx.MethodIndex.Invalid)
                 {
+                    matchedAddresses++;
                     // Lazily create the method since many methods never have code samples in them.
                     if (module == null)
                     {
@@ -8604,6 +8606,8 @@ namespace Microsoft.Diagnostics.Tracing.Etlx
                     }
                 }
             });
+
+            return matchedAddresses;
         }
 
         /// <summary>

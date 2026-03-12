@@ -3,6 +3,7 @@ using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Parsers.Universal.Events;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace Microsoft.Diagnostics.Tracing.SourceConverters
@@ -82,7 +83,27 @@ namespace Microsoft.Diagnostics.Tracing.SourceConverters
             {
                 if (_mappingIdToProcesses.TryGetValue(universalProcessSymbol.MappingId, out TraceProcess process))
                 {
-                    traceLog.CodeAddresses.AddUniversalDynamicSymbol(universalProcessSymbol, process);
+                    int matched = traceLog.CodeAddresses.AddUniversalDynamicSymbol(universalProcessSymbol, process);
+
+                    // If no code addresses matched in the original process, try other processes
+                    // that might have sampled code at the same address range (e.g., fork/exec 
+                    // where mapping was assigned to parent but samples are in child).
+                    if (matched == 0)
+                    {
+                        foreach (var otherProcess in traceLog.Processes)
+                        {
+                            if (otherProcess.ProcessID == process.ProcessID)
+                                continue;
+
+                            int otherMatched = traceLog.CodeAddresses.AddUniversalDynamicSymbol(universalProcessSymbol, otherProcess);
+                            if (otherMatched > 0)
+                            {
+                                Trace.WriteLine(string.Format("[DIAG] Cross-process symbol resolve: '{0}' from PID {1} applied to PID {2} ({3} matches)",
+                                    universalProcessSymbol.Name, process.ProcessID, otherProcess.ProcessID, otherMatched));
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
